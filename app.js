@@ -152,7 +152,10 @@
     if (room <= 0) { toast('영상은 최대 5개까지예요. 하나 빼고 넣어 주세요.'); return; }
     if (files.length > room) toast(`최대 5개라서 ${room}개만 넣었어요.`);
 
-    files.slice(0, room).forEach(createClip);
+    files.slice(0, room).forEach(f => {
+      const clip = createClip(f);
+      if (state.base !== null) uploadClip(clip);
+    });
     renderAll();
   }
 
@@ -462,7 +465,8 @@
 
   /* ───────────── 업로드 ───────────── */
   function uploadClip(clip) {
-    if (!state.base && state.base !== '') return;
+    if (!state.base && state.base !== '') return Promise.resolve(false);
+    if (clip.uploadPromise) return clip.uploadPromise;
     clip.uploading = true;
     clip.progress = 0;
     clip.error = '';
@@ -476,30 +480,33 @@
       clip.progress = e.loaded / e.total;
       syncClip(clip);
     };
-    xhr.onload = () => {
-      clip.uploading = false;
-      let d = {};
-      try { d = JSON.parse(xhr.responseText || '{}'); } catch (e) { d = {}; }
-      if (d.ok) {
-        clip.serverId = d.id;
-        if (d.duration) {
-          if (!clip.duration) { clip.duration = d.duration; clip.start = 0; clip.end = d.duration; }
+    clip.uploadPromise = new Promise(resolve => {
+      const finish = (ok) => {
+        clip.uploading = false;
+        clip.uploadPromise = null;
+        syncClip(clip);
+        updateSummary();
+        resolve(ok);
+      };
+      xhr.onload = () => {
+        let d = {};
+        try { d = JSON.parse(xhr.responseText || '{}'); } catch (e) { d = {}; }
+        if (d.ok) {
+          clip.serverId = d.id;
+          if (d.duration && !clip.duration) { clip.duration = d.duration; clip.start = 0; clip.end = d.duration; }
+          if (d.width) clip.width = d.width;
+          if (d.height) clip.height = d.height;
+          finish(true);
+        } else {
+          clip.error = d.error || '업로드 실패';
+          finish(false);
         }
-        if (d.width) clip.width = d.width;
-        if (d.height) clip.height = d.height;
-      } else {
-        clip.error = d.error || '업로드 실패';
-      }
-      syncClip(clip);
-      updateSummary();
-    };
-    xhr.onerror = () => {
-      clip.uploading = false;
-      clip.error = 'PC 서버에 못 올렸어요';
-      syncClip(clip);
-      updateSummary();
-    };
+      };
+      xhr.onerror = () => { clip.error = 'PC 서버에 못 올렸어요'; finish(false); };
+      xhr.ontimeout = () => { clip.error = 'PC 서버 응답이 없어요'; finish(false); };
+    });
     xhr.send(clip.file);
+    return clip.uploadPromise;
   }
 
   /* ───────────── 서버 작업 ───────────── */
@@ -565,6 +572,14 @@
     }
     const idx = state.clips.indexOf(clip);
 
+    if (state.base !== null && !clip.serverId) {
+      setBusy(true);
+      showJob(2, 'PC 서버로 영상을 올리는 중…');
+      try { await uploadClip(clip); } catch (e) { /* 아래에서 판단 */ }
+      setBusy(false);
+      hideJob();
+    }
+
     if (state.base !== null && clip.serverId) {
       setBusy(true);
       showJob(15, 'ffmpeg로 자르는 중…');
@@ -618,8 +633,15 @@
 
     if (state.base !== null) {
       if (!parts.every(p => p.clip.serverId)) {
-        toast('아직 PC 서버로 업로드 중인 영상이 있어요. 잠시 뒤 다시 눌러 주세요.', 3500);
-        return;
+        setBusy(true);
+        showJob(3, 'PC 서버로 영상을 올리는 중…');
+        await Promise.all(parts.filter(p => !p.clip.serverId).map(p => uploadClip(p.clip)));
+        setBusy(false);
+        hideJob();
+        if (!parts.every(p => p.clip.serverId)) {
+          toast('PC 서버로 올리지 못한 영상이 있어요. 서버가 켜져 있는지 확인해 주세요.', 3800);
+          return;
+        }
       }
       setBusy(true);
       showJob(10, `${parts.length}개 구간을 이어 붙이는 중…`);
