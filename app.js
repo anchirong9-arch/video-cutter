@@ -38,8 +38,9 @@
   function fmtShort(t) {
     t = Math.max(0, Number(t) || 0);
     const m = Math.floor(t / 60);
-    const s = Math.round(t - m * 60);
-    return m > 0 ? `${m}분 ${String(s).padStart(2, '0')}초` : `${s}초`;
+    if (m > 0) return `${m}분 ${String(Math.round(t - m * 60)).padStart(2, '0')}초`;
+    const s = Math.round(t * 10) / 10;
+    return `${Number.isInteger(s) ? s : s.toFixed(1)}초`;
   }
   function parseTime(text) {
     const s = String(text).trim().replace(/,/g, '.');
@@ -590,8 +591,9 @@
     try {
       const res = await recordParts([{ clip, start: clip.start, end: clip.end }], (p, txt) => showJob(p * 100, txt));
       const name = outName(clip, idx) + res.ext;
-      addResult({ name, size: res.blob.size, url: URL.createObjectURL(res.blob) }, '브라우저');
-      autoDownload(URL.createObjectURL(res.blob), name);
+      const blobUrl = URL.createObjectURL(res.blob);
+      addResult({ name, size: res.blob.size, url: blobUrl }, '브라우저');
+      autoDownload(blobUrl, name);
       showJob(100, '완료');
       toast(`${name} 저장했어요`);
       setTimeout(hideJob, 900);
