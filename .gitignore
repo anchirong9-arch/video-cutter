@@ -1,0 +1,9 @@
+# 작업 폴더(업로드·결과물)는 저장소에 올리지 않습니다
+jobs/
+*.mp4
+*.webm
+*.mov
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
