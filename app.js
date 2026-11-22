@@ -242,6 +242,24 @@
         clip.duration = d;
         clip.start = 0;
         clip.end = d;
+      } else if (!clip._probedInfinity) {
+        // 녹화(MediaRecorder) webm 은 길이가 Infinity 로 오기도 함 — 크게 시크해 길이를 받아옵니다
+        clip._probedInfinity = true;
+        const onSeek = () => {
+          clip.video.removeEventListener('timeupdate', onSeek);
+          const real = clip.video.duration;
+          if (isFinite(real) && real > 0) {
+            clip.duration = real;
+            clip.start = 0;
+            clip.end = real;
+            clip.video.currentTime = 0;
+            syncClip(clip);
+            updateSummary();
+          }
+        };
+        clip.video.addEventListener('timeupdate', onSeek);
+        try { clip.video.currentTime = 1e6; } catch (e) { /* noop */ }
+        setTimeout(() => clip.video.removeEventListener('timeupdate', onSeek), 2500);
       }
       clip.width = clip.video.videoWidth || clip.width;
       clip.height = clip.video.videoHeight || clip.height;
@@ -662,17 +680,17 @@
 
   function pickMime() {
     const cands = [
-      ['video/webm;codecs=vp9,opus', 'webm'],
-      ['video/webm;codecs=vp8,opus', 'webm'],
-      ['video/webm', 'webm'],
-      ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'mp4'],
-      ['video/mp4', 'mp4'],
+      ['video/webm;codecs=vp9,opus', '.webm'],
+      ['video/webm;codecs=vp8,opus', '.webm'],
+      ['video/webm', '.webm'],
+      ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', '.mp4'],
+      ['video/mp4', '.mp4'],
     ];
-    if (!window.MediaRecorder) return { mime: '', ext: 'webm' };
+    if (!window.MediaRecorder) return { mime: '', ext: '.webm' };
     for (const [m, ext] of cands) {
       try { if (MediaRecorder.isTypeSupported(m)) return { mime: m, ext }; } catch (e) { /* noop */ }
     }
-    return { mime: '', ext: 'webm' };
+    return { mime: '', ext: '.webm' };
   }
 
   function targetSize(parts) {
