@@ -553,7 +553,8 @@
 
   function outName(clip, idx) {
     const base = (clip.name || 'clip').replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40);
-    return `${String(idx + 1).padStart(2, '0')}_${base}_${Math.round(clip.end - clip.start)}s`;
+    const len = Math.round((clip.end - clip.start) * 10) / 10;
+    return `${String(idx + 1).padStart(2, '0')}_${base}_${len}s`;
   }
 
   async function cutOne(clip) {
